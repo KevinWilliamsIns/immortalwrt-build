@@ -1,9 +1,12 @@
+
+
+
+
 name: ImmortalWrt Build (Rockchip ARMv8 Fuse Packages)
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 720
 
     steps:
     - name: Checkout repository
@@ -20,79 +23,69 @@ jobs:
       with:
         fetch-depth: 0
         persist-credentials: true
-        submodules: recursive
+        submodules: false
 
-    - name: Install build dependencies
+    - name: Setup cache for dl and sstate and ccache
+      uses: actions/cache@v4
+      with:
+        path: |
+          immortalwrt/dl
+          immortalwrt/staging_dir
+          immortalwrt/build_dir
+          ~/.ccache
+        key: ${{ runner.os }}-immortalwrt-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-immortalwrt-
+
+    - name: Install system dependencies
       run: |
         sudo apt-get update -y
         sudo apt-get install -y \
           build-essential clang llvm gawk flex bison gettext \
           libncurses-dev libssl-dev libelf-dev zlib1g-dev \
-          rsync unzip file wget curl \
+          rsync unzip file wget curl ca-certificates \
           python3 python3-dev python3-setuptools python3-pyelftools \
-          perl ccache upx swig
+          python3-distutils python3-distutils-extra \
+          liblzma-dev libbz2-dev libzstd-dev libz-dev \
+          perl ccache upx swig pkg-config
 
-    - name: Debug repo state
+    - name: Checkout ImmortalWrt source (clone into subfolder)
       run: |
-        echo "WORKDIR: $(pwd)"
-        ls -la
-        git status --porcelain || true
-        git rev-parse --is-inside-work-tree || true
-
-    - name: Clone ImmortalWrt source
-      run: |
-        set -eux
-        # clone official ImmortalWrt into subfolder 'immortalwrt'
-        git clone https://github.com/immortalwrt/immortalwrt.git immortalwrt
+        git clone --depth 1 https://github.com/immortalwrt/immortalwrt.git immortalwrt
         cd immortalwrt
-        git rev-parse --is-inside-work-tree
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
     - name: Prepare .config and defconfig
       run: |
-        set -eux
-        # ensure your repository root contains a .config file
-        if [ ! -f .config ]; then
-          echo ".config not found in repo root" >&2
-          exit 1
-        fi
         cp .config immortalwrt/.config
         cd immortalwrt
-        # verify .config present and run defconfig
-        ls -la .config
         make defconfig
+
+    - name: Build host tools (ensure libdeflate-gzip etc exist)
+      run: |
+        cd immortalwrt
+        # 降低并行度以避免 runner 内存不足，必要时改为 -j2
+        MAKEFLAGS="-j$(nproc)" make tools/compile V=s
 
     - name: Build selected packages
       run: |
-        set -eux
         cd immortalwrt
-        # compile only packages enabled in .config
-        make package/compile V=s
+        # 如果内存不足，可把 -j$(nproc) 改为 -j2
+        MAKEFLAGS="-j$(nproc)" make package/compile V=s
 
-    - name: Collect package artifacts (diagnose paths)
+    - name: Collect package artifacts
       run: |
-        set -eux
-        echo "Listing possible package output directories"
-        ls -la immortalwrt/bin/packages || true
-        ls -la immortalwrt/bin/packages/armv8 || true
-        ls -la immortalwrt/bin/packages/aarch64_generic || true
-        ls -la immortalwrt/bin/targets || true
-        # create a small manifest for debugging
-        find immortalwrt/bin -type f -name "*.ipk" -print > ipk-list.txt || true
-        echo "IPK list:"
-        cat ipk-list.txt || true
+        cd immortalwrt
+        find bin -type f -name "*.ipk" -print > ../ipk-list.txt || true
+        ls -la bin || true
+        cat ../ipk-list.txt || true
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: fuse-packages-armv8
         path: |
-          immortalwrt/bin/packages/armv8/base/*.ipk
-          immortalwrt/bin/packages/aarch64_generic/base/*.ipk
           immortalwrt/bin/packages/*/base/*.ipk
-          immortalwrt/bin/targets/rockchip/armv8/*.ipk
+          immortalwrt/bin/targets/**/**/*.ipk
           ipk-list.txt
-
-
-
