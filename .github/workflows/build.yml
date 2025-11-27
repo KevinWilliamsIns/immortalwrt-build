@@ -37,7 +37,7 @@ jobs:
         make package/compile V=s
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: fuse-packages-armv8
         path: bin/packages/armv8/base/*.ipk
