@@ -15,9 +15,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    evn:
+      MAKEFLAGS: "-j1"
     timeout-minutes: 720
 
     steps:
+    - run: make package/compile V=s
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
