@@ -1,7 +1,3 @@
-
-
-
-
 name: ImmortalWrt Build (Rockchip ARMv8 Fuse Packages)
 
 on:
@@ -15,12 +11,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    evn:
+    env:
       MAKEFLAGS: "-j1"
     timeout-minutes: 720
 
     steps:
-    - run: make package/compile V=s
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
@@ -68,14 +63,12 @@ jobs:
     - name: Build host tools (ensure libdeflate-gzip etc exist)
       run: |
         cd immortalwrt
-        # 降低并行度以避免 runner 内存不足，必要时改为 -j2
-        MAKEFLAGS="-j$(nproc)" make tools/compile V=s
+        MAKEFLAGS="$MAKEFLAGS" make tools/compile V=s
 
     - name: Build selected packages
       run: |
         cd immortalwrt
-        # 如果内存不足，可把 -j$(nproc) 改为 -j2
-        MAKEFLAGS="-j$(nproc)" make package/compile V=s
+        MAKEFLAGS="$MAKEFLAGS" make package/compile V=s
 
     - name: Collect package artifacts
       run: |
@@ -91,4 +84,3 @@ jobs:
         path: |
           immortalwrt/bin/packages/*/base/*.ipk
           immortalwrt/bin/targets/**/**/*.ipk
-          ipk-list.txt
