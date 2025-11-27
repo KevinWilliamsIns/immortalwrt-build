@@ -1,8 +1,10 @@
 
-name: ImmortalWrt Build (fuse packages)
+name: ImmortalWrt Build
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
@@ -12,16 +14,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Update apt
+        run: |
+         sudo apt-get update -y
+
+      
       - name: Install build dependencies
         run: |
-          sudo apt update
-          sudo apt install -y \
-            build-essential clang llvm gawk flex bison gettext \
-            libncurses5-dev libncursesw5-dev \
-            libssl-dev libelf-dev zlib1g-dev \
-            rsync unzip file wget curl \
-            python3 perl \
-            ccache upx ucl
+         sudo apt-get install -y \
+           build-essential clang llvm gawk flex bison gettext \
+           libncurses-dev libssl-dev libelf-dev zlib1g-dev \
+           rsync unzip file wget curl \
+           python3 perl ccache upx ucl
 
       - name: Clone ImmortalWrt
         run: |
@@ -72,3 +76,9 @@ jobs:
         with:
           name: fuse-packages
           path: /tmp/out
+
+      - name: Debug apt install
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y build-essential || true
+
