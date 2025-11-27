@@ -1,1 +1,74 @@
 
+name: ImmortalWrt Build (fuse packages)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            build-essential clang llvm gawk flex bison gettext \
+            libncurses5-dev libncursesw5-dev \
+            libssl-dev libelf-dev zlib1g-dev \
+            rsync unzip file wget curl \
+            python3 perl \
+            ccache upx ucl
+
+      - name: Clone ImmortalWrt
+        run: |
+          git clone https://github.com/immortalwrt/immortalwrt.git
+          cd immortalwrt
+          git checkout v24.10.4
+
+      - name: Update & install feeds
+        working-directory: immortalwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure target & packages
+        working-directory: immortalwrt
+        run: |
+          cat >> .config <<'EOF'
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          CONFIG_PACKAGE_kmod-fuse=y
+          CONFIG_PACKAGE_libfuse3=y
+          CONFIG_PACKAGE_fuse-overlayfs=y
+          EOF
+          make defconfig
+
+      - name: Build kmod-fuse
+        working-directory: immortalwrt
+        run: make package/kmod-fuse/compile V=s
+
+      - name: Build libfuse3
+        working-directory: immortalwrt
+        run: make package/libfuse3/compile V=s
+
+      - name: Build fuse-overlayfs
+        working-directory: immortalwrt
+        run: make package/fuse-overlayfs/compile V=s
+
+      - name: Collect artifacts
+        working-directory: immortalwrt
+        run: |
+          mkdir -p /tmp/out
+          find bin/targets -type f -name "*.ipk" -exec cp {} /tmp/out/ \;
+          find bin/packages -type f -name "*.ipk" -exec cp {} /tmp/out/ \;
+          ls -l /tmp/out
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuse-packages
+          path: /tmp/out
